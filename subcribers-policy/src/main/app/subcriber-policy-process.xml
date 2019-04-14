@@ -20,12 +20,17 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
         			<splitter expression="#[payload.request.inquiries]" doc:name="Splitter"/>
             </vm:outbound-endpoint>
             <vm:inbound-endpoint exchange-pattern="one-way" path="backend-replay" connector-ref="subcribers-backend" doc:name="Backend-Replay">
-            		<collection-aggregator failOnTimeout="true"  doc:name="Collection Aggregator"/>
+            		<collection-aggregator failOnTimeout="true"  doc:name="Collection Aggregator" />
             </vm:inbound-endpoint>
         </request-reply>
-        <component class="PayloadCombineProcessor" doc:name="Combine Payload"/>
+        <component class="com.yohanesws.processor.PayloadCombineProcessor" doc:name="Combine Payload"/>
         <json:object-to-json-transformer doc:name="Object to JSON"/>
         <logger message="Finish Process #[payload]" level="INFO" doc:name="Logger"/>
+        <catch-exception-strategy doc:name="Catch Exception Strategy">
+            <logger message="payload #[payload] error at #[exception]" level="ERROR" doc:name="Logger"/>
+            <set-payload value="#[payload.text]" doc:name="Set Payload"/>
+            <logger message="setting new payload #[payload]" />
+        </catch-exception-strategy>
     </flow>
     <flow name="Backend">
         <vm:inbound-endpoint exchange-pattern="one-way" connector-ref="subcribers-backend" doc:name="Backend-Request" path="backend-request"/>
@@ -33,9 +38,19 @@ http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/m
             <set-variable variableName="queue" value="#[payload]" doc:name="Set Queue" />
             <set-payload value="#[sessionVars.msisdn]" doc:name="Set Payload"/>
             <logger message="getting inquiry for #[payload] about #[flowVars.queue]" level="INFO" doc:name="Logger"/>
-            <jms:outbound-endpoint exchange-pattern="request-response" queue="#['${queue.subcriber.prefix}'+flowVars.queue]" connector-ref="Active_MQ" doc:name="JMS-Backend"/>
+            <jms:outbound-endpoint exchange-pattern="request-response" queue="#['${queue.subcriber.prefix}'+flowVars.queue]" connector-ref="Active_MQ"  doc:name="JMS-Backend"/>
             <logger message="get from backend #[payload]" level="INFO" doc:name="Logger"/>
             <vm:outbound-endpoint exchange-pattern="one-way" path="backend-replay" connector-ref="subcribers-backend" doc:name="Backend-Replay"/>
         </async>
+       <!-- <choice-exception-strategy doc:name="Choice Exception Strategy">
+           <rollback-exception-strategy doc:name="Rollback Exception Strategy" when="#[exception.causedBy(java.lang.Exception)]">
+            	<logger message="error happen" level="ERROR" doc:name="Logger"/>
+                <set-payload value="#[['msisdn':sessionVars.msisdn,'backend':flowVars.queue,'status':'backend not ready']]" doc:name="Set Payload"/>
+                           </rollback-exception-strategy> 
+            <catch-exception-strategy doc:name="Catch Exception Strategy"> 
+            		<logger message="error happen" level="ERROR" doc:name="Logger"/>
+                <set-payload value="#[['msisdn':sessionVars.msisdn,'backend':flowVars.queue,'status':'backend not ready']]" doc:name="Set Payload"/>
+            </catch-exception-strategy>
+        </choice-exception-strategy>  -->
     </flow>
 </mule>
