@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:mongo="http://www.mulesoft.org/schema/mule/mongo" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:twitter="http://www.mulesoft.org/schema/mule/twitter" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/twitter http://www.mulesoft.org/schema/mule/twitter/current/mule-twitter.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/mongo http://www.mulesoft.org/schema/mule/mongo/current/mule-mongo.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd">
+    <twitter:config name="Twitter_Config" accessKey="${twitter.secret.accessKey}" accessSecret="${twitter.secret.accessSecret}" consumerKey="${twitter.secret.consumerKey}" consumerSecret="${twitter.secret.consumerSecret}" doc:name="Twitter: Configuration">
+        <reconnect count="${twitter.connection.reconnect.count}"/>
+    </twitter:config>
+    <jms:activemq-connector name="Active_MQ" brokerURL="vm://localhost" validateConnections="true" doc:name="Active MQ">
+        <reconnect count="5"/>
+    </jms:activemq-connector>
+    <mongo:config name="Mongo_DB" username="${mongodb.db.username}" password="${mongodb.db.password}" database="${mongodb.db.name}"  doc:name="Mongo DB" host="${mongodb.db.hostname}">
+        <reconnect count="5"/>
+    </mongo:config>
+    <sfdc:config name="Salesforce__Basic_Authentication" username="${sf.secret.username}" password="${sf.secret.password}" securityToken="${sf.secret.token}" doc:name="Salesforce: Basic Authentication" url="https://ap4.salesforce.com/services/Soap/u/43.0"/>
+   
+    <flow name="QueryMentionFlow">
+        <poll doc:name="Twitter Poll">
+            <fixed-frequency-scheduler frequency="${twitter.poll.frequency}" timeUnit="SECONDS"/>
+            <twitter:search config-ref="Twitter_Config" doc:name="Twitter" query="${twitter.search.keyword}" resultType="${twitter.search.result.type}" sinceId="${twitter.search.since}"/>
+        </poll>
+        <logger message="Get Tweets #[payload.tweets]" level="INFO" doc:name="Logger"/>
+        <component class="com.yohanesws.processor.TwitterPayloadProcessor" doc:name="Processor"/>
+        <collection-splitter doc:name="Tweets Splitter"/>
+        <jms:outbound-endpoint topic="${jms.topic.tweets}" connector-ref="Active_MQ" doc:name="Publish Events">
+        </jms:outbound-endpoint>
+    </flow>
+    <flow name="SaveToSF">
+        <jms:inbound-endpoint topic="${jms.topic.tweets}" connector-ref="Active_MQ" doc:name="Get Tweets">
+            <idempotent-redelivery-policy/>
+        </jms:inbound-endpoint>
+        <set-variable variableName="originalPayload" value="#[payload]" doc:name="Save Original Payload" />
+        <logger message="getting tweet for SalesForce #[payload.text]" level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Transform Message" metadata:id="201ab3f8-7bfe-466e-96ec-b483bcb5bd77">
+            <dw:input-payload doc:sample="sample_data/Status.dwl" mimeType="application/java"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	Company:"Twitter",
+	LastName: payload.user.screenName,
+	Email: "dummy@emailku.com",
+	Website: payload.user.URL,
+	Description:payload.user.name ++ ":::" ++ payload.text ++ ":::" ++ payload.user.description,
+	Status: "Open - Not Contacted"
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <sfdc:create-single config-ref="Salesforce__Basic_Authentication" type="Lead" doc:name="Add Lead">
+            <sfdc:object ref="#[payload]"/>
+        </sfdc:create-single>
+        <component class="com.yohanesws.processor.SFResponseProcessor" doc:name="SF Response Handler"/>
+        <choice-exception-strategy doc:name="Choice Exception Strategy">
+            <catch-exception-strategy when="#[exception.causedBy(com.yohanesws.exception.SalesForceBusinessException)]" doc:name="Catch Failed SalesForce">
+	            <set-payload doc:name="Set Payload" value="#[flowVars.originalPayload]"/>
+                <logger message="sent message to failed queue" level="INFO" doc:name="Logger"/>
+	            <jms:outbound-endpoint queue="failedSFSaved" connector-ref="Active_MQ" doc:name="Failed SF Queue"/>
+            </catch-exception-strategy>
+            <rollback-exception-strategy doc:name="Rollback Exception Strategy">
+                <logger message="Others Error" level="ERROR" doc:name="Logger"/>
+            </rollback-exception-strategy>
+        </choice-exception-strategy>
+    </flow>
+    <flow name="SaveToMongoDb">
+        <jms:inbound-endpoint topic="${jms.topic.tweets}" connector-ref="Active_MQ" doc:name="Get Tweets">
+            <idempotent-redelivery-policy/>
+        </jms:inbound-endpoint>
+        <logger message="getting tweet for MongoDB #[payload]" level="INFO" doc:name="Logger"/>
+        <json:object-to-json-transformer doc:name="Object to JSON"/>
+        <mongo:json-to-dbobject doc:name="Transform to MongoDB"/>
+        <mongo:save-object config-ref="Mongo_DB" collection="${mongodb.db.collection}" doc:name="Add Tweet" />
+        <rollback-exception-strategy doc:name="Rollback Exception Strategy">
+            <logger message="Unexpected Error" level="ERROR" doc:name="Logger"/>
+        </rollback-exception-strategy>
+    </flow>
+</mule>

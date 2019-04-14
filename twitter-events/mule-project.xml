@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<mule-project xmlns="http://www.mulesoft.com/tooling/project" runtimeId="org.mule.tooling.server.3.9.2.ee" schemaVersion="5.3.0.0">
+    <name>twitter-events</name>
+    <description></description>
+    <muleExtension name="Twitter" qualifier="org.mule.tooling.ui.contribution.twitter.3.6.0"/>
+    <muleExtension name="Anypoint MQ" qualifier="org.mule.tooling.messaging.contribution"/>
+    <muleExtension name="Mongo DB" qualifier="org.mule.tooling.ui.contribution.mongo.3.5.0"/>
+    <muleExtension name="Salesforce" qualifier="org.mule.tooling.ui.contribution.sfdc.3.5.0"/>
+</mule-project>
