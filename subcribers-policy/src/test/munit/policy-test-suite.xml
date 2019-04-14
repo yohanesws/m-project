@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:mock="http://www.mulesoft.org/schema/mule/mock" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mock http://www.mulesoft.org/schema/mule/mock/current/mule-mock.xsd">
+    <munit:config name="munit" doc:name="MUnit configuration" mock-connectors="false" mock-inbounds="false"/>
+    <spring:beans>
+        <spring:import resource="classpath:subcriber-policy-process.xml"/>
+        <spring:import resource="classpath:subcriber-balance-svc.xml"/>
+        <spring:import resource="classpath:subcriber-profile-svc.xml"/>
+    </spring:beans>
+    <munit:test name="new-test-suite-subcribers-policyFlowTest" description="Test">
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Request">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[{&quot;request&quot;:{&quot;msisdn&quot;:&quot;08159167113&quot;,&quot;inquiries&quot;:[&quot;balance&quot;,&quot;profile&quot;]}}]"/>
+        </mock:when>
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Backend Balance">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS-Backend']"/>
+                <mock:with-attribute name="queue" whereValue="#['subcriber.balance']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[['msisdn':'08159167113','balance':10000]]"/>
+        </mock:when>
+        <mock:when messageProcessor=".*:.*" doc:name="Mock Backend Profile">
+            <mock:with-attributes>
+                <mock:with-attribute name="doc:name" whereValue="#['JMS-Backend']"/>
+                <mock:with-attribute name="queue" whereValue="#['subcriber.profile']"/>
+            </mock:with-attributes>
+            <mock:then-return payload="#[['msisdn':'08159167113','profileNo': '010101010','profileGroup': '10']]"/>
+        </mock:when>
+        <munit:set payload="#[{&quot;request&quot;:{&quot;msisdn&quot;:&quot;08159167113&quot;,&quot;inquiries&quot;:[&quot;balance&quot;,&quot;profile&quot;]}}]" doc:name="Set Message"/>
+        <flow-ref name="subcribers-policyFlow" doc:name="Flow-ref to subcribers-policy-processFlow"/>
+        <json:json-to-object-transformer doc:name="JSON to Object" returnClass="java.util.Map"/>
+        <munit:assert-not-null  message="#[payload.response.msisdn]" doc:name="Assert MSISDN payload"/>
+       <!--  <munit:assert-not-null message="#[payload.balance]" doc:name="Assert Balance Payload"/> -->
+    </munit:test>
+</mule>

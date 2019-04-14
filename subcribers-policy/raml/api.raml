@@ -1,0 +1,26 @@
+#%RAML 0.8
+title: Subcriber
+version: v1
+baseUri: http://localhost:8080/api/{version}
+/subcriber/info:
+  post:
+      body:
+        application/xml:
+          example: |
+            <?xml version="1.0" encoding="UTF-8" ?>
+            <request>
+            	<msisdn>08159167113</msisdn>
+            	<inquiries>balance</inquiries>
+            	<inquiries>profile</inquiries>
+            </request>
+      responses:
+        200:
+          body:
+            application/xml:
+              example: |
+                <?xml version="1.0" encoding="UTF-8" ?>
+                <response>
+                	<msisdn>08159167113</msisdn>
+                	<balance>10000</balance>
+                	<profileNo>1000</profileNo>
+                </responses>
