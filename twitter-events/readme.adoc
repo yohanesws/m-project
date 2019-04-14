@@ -1,0 +1,11 @@
+== Prerequisite
+
+* activemq/embedded activemq installed
+* salesforce access
+* twitter developer access
+* mongodb 2.6
+* fill in template-config.properties and rename the file became mule-app.properties
+
+== How To Run
+
+*  run as mule application at anypoint studio

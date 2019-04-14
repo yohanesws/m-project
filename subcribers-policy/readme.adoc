@@ -1,0 +1,8 @@
+== Prerequisite
+
+* activemq/embedded activemq installed
+* fill in template-config.properties and rename the file became mule-app.properties
+
+== How To Run
+
+*  run as mule application at anypoint studio
